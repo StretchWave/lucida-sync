@@ -1,6 +1,4 @@
 <div align="center">
-  <img src="lucida_flow.png" alt="Lucida Flow Logo" width="600"/>
-  
   # Lucida-Sync
   
   A Python CLI tool and REST API for downloading high-quality music from various streaming services using [Lucida.to](https://lucida.to), with Amazon Music as the default service.
