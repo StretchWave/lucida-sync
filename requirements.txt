@@ -1,0 +1,7 @@
+playwright
+spotipy
+rich
+python-dotenv
+curl_cffi
+beautifulsoup4
+pyjson5
