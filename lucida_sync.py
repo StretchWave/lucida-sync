@@ -79,21 +79,57 @@ class SpotifyToFlac:
             
             try:
                 # Pierce shadow DOM to find results
-                await page.wait_for_selector('music-responsive-list-item a, music-vertical-item a, a[href*="trackAsin"]', timeout=15000)
+                # Amazon Music now uses custom elements like music-horizontal-item
+                await page.wait_for_selector('music-horizontal-item, music-vertical-item, a[href*="trackAsin"]', timeout=15000)
             except:
                 pass
 
-            hrefs = await page.locator("a").evaluate_all("els => els.map(e => e.href)")
+            # Extract links from standard anchors and custom elements
+            # music-horizontal-item and music-vertical-item store the link in 'primary-href' attribute
+            hrefs = await page.evaluate('''() => {
+                const anchors = Array.from(document.querySelectorAll('a')).map(a => a.href);
+                const items = Array.from(document.querySelectorAll('music-horizontal-item, music-vertical-item'));
+                const itemLinks = items.map(i => i.getAttribute('primary-href')).filter(h => h).map(h => h.startsWith('/') ? 'https://music.amazon.com' + h : h);
+                return [...anchors, ...itemLinks];
+            }''')
             
             for href in hrefs:
                 if 'trackAsin=' in href: return href
             for href in hrefs:
                 if '/tracks/' in href: return href
 
+            # DEBUG: Take screenshot if no link found
+            try:
+                debug_filename = self._sanitize_filename(query)
+                await page.screenshot(path=f"debug_empty_{debug_filename}.png")
+                with open(f"debug_empty_{debug_filename}.html", "w", encoding="utf-8") as f:
+                    f.write(await page.content())
+                console.print(f"[bold red]DEBUG: Saved screenshot and HTML for empty search: debug_empty_{debug_filename}[/bold red]")
+                
+                # DEBUG: Print all links found
+                all_links = hrefs # Use the same list we just extracted
+                console.print(f"[dim]Found {len(all_links)} links on page. Sample: {all_links[:5]}[/dim]")
+            except Exception as debug_e:
+                 console.print(f"Failed to save debug info: {debug_e}")
+
             return None
             
         except Exception as e:
             console.print(f"[dim red]Amazon search failed for {query}: {e}[/dim red]")
+            # DEBUG: Take screenshot
+            try:
+                debug_filename = self._sanitize_filename(query)
+                await page.screenshot(path=f"debug_fail_{debug_filename}.png")
+                with open(f"debug_fail_{debug_filename}.html", "w", encoding="utf-8") as f:
+                    f.write(await page.content())
+                console.print(f"[bold red]DEBUG: Saved screenshot and HTML for failed search: debug_fail_{debug_filename}[/bold red]")
+                
+                # DEBUG: Print all links found
+                all_links = await page.locator("a").evaluate_all("els => els.map(e => e.href)")
+                console.print(f"[dim]Found {len(all_links)} links on page. Sample: {all_links[:5]}[/dim]")
+            except Exception as debug_e:
+                console.print(f"Failed to save debug info: {debug_e}")
+                
             return None
 
     def get_playlist_tracks(self, playlist_url):

@@ -224,10 +224,36 @@ class LucidaClient:
                 await asyncio.sleep(0.3) 
                 
                 console.print(f"[bold yellow]Clicking download button...[/bold yellow]")
-                async with p_page.expect_download(timeout=300000) as download_info:
-                    await p_page.locator(download_btn_selector).first.click(force=True)
                 
-                download = await download_info.value
+                download = None
+                async with p_page.expect_download(timeout=300000) as download_info:
+                    # Retry logic for the CLICK action
+                    # Lucida sometimes ignores the first click or gets stuck. 
+                    # We try clicking, wait to see if download starts, and retry if not.
+                    for attempt in range(5):
+                        try:
+                            # Ensure button is visible before clicking
+                            btn = p_page.locator(download_btn_selector).first
+                            if await btn.is_visible():
+                                await btn.click(force=True)
+                            
+                            # Wait up to 15s for the download to *start*
+                            # Use shield() to preserve the underlying download_info future if we timeout here
+                            download = await asyncio.wait_for(asyncio.shield(download_info.value), timeout=15.0)
+                            
+                            # If we get here, download started successfully
+                            break
+                        except asyncio.TimeoutError:
+                            if attempt < 4:
+                                console.print(f"[yellow]Download didn't start within 15s. Retrying click (Attempt {attempt+2}/5)...[/yellow]")
+                                await asyncio.sleep(1.0)
+                            else:
+                                console.print(f"[red]All click retries failed. Waiting for remaining timeout...[/red]")
+                    
+                    # If we fell through the loop without success, wait for the original future 
+                    # (in case it's just very slow but eventually works)
+                    if not download:
+                        download = await download_info.value
                 console.print(f"[green]Download starting:[/green] {download.suggested_filename}")
                 
                 if output_path:
